@@ -88,6 +88,7 @@ def ask_llm_locally(user_prompt, backend_context):
     except Exception:
          return "(El LLM local no está respondiendo. Verifica que Ollama esté encendido). \n\n**JSON Simbólico Interno:**\n" + backend_context
 
+import sys
 import re
 
 def extract_equation(text):
@@ -99,11 +100,46 @@ def extract_equation(text):
     return text
 
 def update_video(old_eq, new_eq, desc):
-    """Ejecuta Manim de forma asíncrona para mitigar latencia y actualiza la UI cuando acaba"""
-    subprocess.run([MANIM_CMD, old_eq, new_eq, desc], cwd="./manim_module", capture_output=True)
-    video_file = "../manim_module/media/videos/renderer/480p15/EquationTransition.mp4"
+    """Ejecuta Manim garantizando el PATH del virtual environment local"""
+    
+    # 1. Logging a Consola
+    print("\n\n" + "="*60)
+    print("🎬 [MANIM VIDEO DEBUGGER]")
+    print(f"🐍 Python VENV Engine: {sys.executable}")
+    print(f"📥 Estado Anterior: {old_eq} | 📤 Estado Nuevo: {new_eq}")
+    
+    # 2. Inyectamos variables de entorno directamente al Subproceso (Simulamos lo que hacía bash)
+    env = os.environ.copy()
+    env["EQ_OLD"] = old_eq
+    env["EQ_NEW"] = new_eq
+    env["DESC"] = desc
+    
+    # 3. Mandamos llamar a Manim forzando estrictamente que use el VENV actual
+    cmd = [
+        sys.executable, "-m", "manim", "-ql", "--disable_caching", 
+        "renderer.py", "EquationTransition"
+    ]
+    
+    try:
+        # cwd asegura que opere dentro de manim_module localizando a renderer.py
+        result = subprocess.run(cmd, cwd="./manim_module", env=env, capture_output=True, text=True)
+        print("\n--- STDOUT de Manim ---")
+        print(result.stdout)
+        print("\n--- STDERR de Manim ---")
+        print(result.stderr)
+        print("="*60 + "\n")
+    except Exception as e:
+        print(f"\n❌ [Excepción Fatal]: No se pudo iniciar el proceso Manim: {e}\n")
+
+    # 4. Resolvemos el archivo de forma absoluta a los ojos de Streamlit (el cual corre en la raíz)
+    # Volvemos a la ruta normal que funciona resolutivamente si el script se llama desde el root
+    video_file = os.path.abspath("./manim_module/media/videos/renderer/480p15/EquationTransition.mp4")
+    
     if os.path.exists(video_file):
         st.session_state.video_path = video_file
+        print(f"✅ VIDEO CARGADO EXITOSAMENTE: {video_file}")
+    else:
+        print(f"⚠️ EL VIDEO FALLÓ EN GENERARSE (File not found en: {video_file})")
 
 # --- UI LAYOUT ---
 col1, col2 = st.columns([1.5, 1])
