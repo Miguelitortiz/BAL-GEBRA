@@ -8,8 +8,8 @@ import os
 st.set_page_config(page_title="Neuro-Symbolic LLM Tutor", layout="wide")
 
 # Rutas absolutas a nuestros módulos (Go y Bash/Manim)
-SOLVER_CMD = "./solver/solver"  # Asumiendo que se ejecuta desde la raíz del proyecto
-MANIM_CMD = "./manim_module/generate_video.sh"
+# Eliminamos el binario quemado y ejecutamos de forma nativa multiplataforma
+MANIM_CMD = "bash ./manim_module/generate_video.sh"
 
 # Configuración del LLM Local (Ollama por defecto)
 OLLAMA_URL = "http://localhost:11434/api/chat"
@@ -35,9 +35,10 @@ if "video_path" not in st.session_state:
 
 # --- HELPER FUNCTIONS ---
 def run_solver(*args):
-    """Ejecuta el Go Orchestrator de manera atómica"""
-    cmd = [SOLVER_CMD] + list(args)
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    """Ejecuta el Go Orchestrator de manera atómica cruzada (Linux/Mac/Windows)"""
+    # go run . compila nativamente en un par de milisegundos usando el chip del dispositivo actual
+    cmd = ["go", "run", "."] + list(args)
+    result = subprocess.run(cmd, cwd="./solver", capture_output=True, text=True)
     
     # Extraemos el bloque JSON escupido al final del comando de Go
     output = result.stdout.strip()
