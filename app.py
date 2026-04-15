@@ -58,17 +58,19 @@ def ask_llm_locally(user_prompt, backend_context):
     for msg in st.session_state.messages[:-1]:
         messages.append({"role": msg["role"], "content": msg["content"]})
         
-    # Inyectar el diagnóstico de nuestro orquestador como un mensaje invisible para guiarlo
-    hidden_system = f"--- CONTEXTO SIMBÓLICO Y DIRECTRIZ (NO LO LEAS EN VOZ ALTA) ---\n{backend_context}"
-    messages.append({"role": "system", "content": hidden_system})
+    # Llama 3 y otros modelos locales colapsan si ven mensajes "system" a mitad del historial.
+    # La solución es fusionar el contexto interno y el prompt en un solo mensaje de usuario.
+    combined_prompt = f"[ENTORNO DE ORQUESTACIÓN NO VISIBLE PARA EL ALUMNO]:\n{backend_context}\n\n[LO QUE EL ALUMNO ESCRIBIÓ LITERALMENTE]:\n{user_prompt}"
     
-    # Finalmente agregar exactamente lo que dijo el usuario
-    messages.append({"role": "user", "content": user_prompt})
+    messages.append({"role": "user", "content": combined_prompt})
 
     payload = {
         "model": OLLAMA_MODEL,
         "messages": messages,
-        "stream": False
+        "stream": False,
+        "options": {
+            "temperature": 0.2  # Endurece el modelo para evitar alucinaciones
+        }
     }
     
     try:
