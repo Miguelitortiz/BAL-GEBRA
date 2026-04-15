@@ -17,10 +17,10 @@ echo " Después: $EQ_NEW"
 echo " Heurística: $DESC"
 echo "========================================="
 
-# Ejecutamos Manim:
+# Ejecutamos Manim atado a la instancia principal de Python
 # -ql: Quality Low (480p15), indispensable para mitigar la latencia de renderizado
 #      en interacciones semi-tiempo-real (Tutor LLM).
 # --disable_caching: Previene conflictos de caché si reutilizamos la misma clase
-manim -ql --disable_caching renderer.py EquationTransition
+python3 -m manim -ql --disable_caching renderer.py EquationTransition
 
 echo "Video generado en: media/videos/renderer/480p15/EquationTransition.mp4"
