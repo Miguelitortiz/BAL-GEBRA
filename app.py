@@ -10,7 +10,7 @@ st.set_page_config(page_title="Neuro-Symbolic LLM Tutor", layout="wide")
 # Rutas absolutas a nuestros módulos (Go y Bash/Manim)
 # Revertido al target dinámico para que use tu compilación nativa en la Mac
 SOLVER_CMD = "./solver/solver"  
-MANIM_CMD = "./manim_module/generate_video.sh"
+MANIM_CMD = "../manim_module/generate_video.sh"
 
 # Configuración del LLM Local (Ollama por defecto)
 OLLAMA_URL = "http://localhost:11434/api/chat"
@@ -27,6 +27,8 @@ SYSTEM_PROMPT = """Eres un tutor socrático de álgebra estricto. DEBES cumplir 
 # --- SESSION STATE ---
 if "equation" not in st.session_state:
     st.session_state.equation = ""
+if "is_solved" not in st.session_state:
+    st.session_state.is_solved = False
 if "messages" not in st.session_state:
     st.session_state.messages = [
         {"role": "assistant", "content": "¡Hola! Estoy aquí para acompañarte a practicar. Escribe la ecuación algebraica con la que quieres empezar en el chat."}
@@ -119,12 +121,25 @@ with col2:
         st.video(st.session_state.video_path)
     else:
         st.info("La animación del paso aparecerá aquí.")
+        
+    if st.session_state.is_solved:
+        st.success("¡Ecuación Completada!")
+        if st.button("🔄 Comenzar Nueva Ecuación", use_container_width=True):
+            st.session_state.equation = ""
+            st.session_state.is_solved = False
+            st.session_state.video_path = None
+            st.session_state.messages = [
+                {"role": "assistant", "content": "¡Hola de nuevo! Estoy listo. Escribe la nueva ecuación algebraica que resolveremos."}
+            ]
+            st.rerun()
 
 # IZQUIERDA: Chat LLM
 with col1:
     st.header("Tutor Inteligente")
     
-    for msg in st.session_state.messages:
+    # Mostrar sólo los últimos 2 mensajes de la conversación, pero Ollama recuerda todos.
+    mensajes_visibles = st.session_state.messages[-2:] if len(st.session_state.messages) > 1 else st.session_state.messages
+    for msg in mensajes_visibles:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
@@ -153,6 +168,12 @@ with col1:
                             # Si es la primera vez y el parseo sobrevivió, interceptamos la ecuación limpia
                             update_video("0 = 0", clean_prompt, "Iniciando la resolución algebraíca")
                             st.session_state.equation = clean_prompt
+                            
+                            # Validamos inmediamentamente si propuso una ecuación que YA está resuelta
+                            probe_next = run_solver("hint", clean_prompt)
+                            if "error" in probe_next:
+                                st.session_state.is_solved = True
+                            
                             backend_context = f"El usuario te trajo esta ecuación con lenguaje natural: '{prompt}'. El sistema extrajo matemáticamente '{clean_prompt}'. Acéptala alegremente y dile que empiecen."
                     else:
                         # Validar el paso normal
@@ -166,7 +187,13 @@ with col1:
                             update_video(st.session_state.equation, clean_prompt, desc)
                             st.session_state.equation = clean_prompt
                             
-                            backend_context = f"El usuario escribió: '{prompt}'. Su paso matemático extraído '{clean_prompt}' es VÁLIDO matemática y lógicamente. Felicítalo empáticamente."
+                            # Revisamos furtivamente si este paso terminó de resolver la ecuación por completo
+                            probe_next = run_solver("hint", clean_prompt)
+                            if "error" in probe_next:
+                                st.session_state.is_solved = True
+                                backend_context = f"El alumno resolvió exitosamente la ecuación con el paso '{clean_prompt}'. Felicítalo efusivamente y menciónale que ahora le saldrá el botón de Reiniciar si quiere hacer otra."
+                            else:
+                                backend_context = f"El usuario escribió: '{prompt}'. Su paso matemático extraído '{clean_prompt}' es VÁLIDO matemática y lógicamente. Felicítalo empáticamente."
                         else:
                             # Si es inválido, el LLM lee el diagnóstico exacto de nuestro árbol de Go
                             error_diagnostico = validation.get("error", "Error matemático desconocido.")
@@ -178,7 +205,8 @@ with col1:
                     else:
                         hint = run_solver("hint", st.session_state.equation)
                         if "error" in hint:
-                            backend_context = f"La ecuación está totalmente resuelta. Felicítalo y dile que ya acabaron."
+                            st.session_state.is_solved = True
+                            backend_context = f"La ecuación está totalmente resuelta. Felicítalo y dile que presione el botón para reiniciar."
                         else:
                             siguiente_paso = hint.get("resultado")
                             descripcion = hint.get("descripcion")
