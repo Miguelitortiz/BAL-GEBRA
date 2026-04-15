@@ -129,10 +129,17 @@ with col1:
                 # Si el input tiene "=", presumimos que intentó un paso matemático
                 if "=" in prompt:
                     if st.session_state.equation == "":
-                        # Si es la primera vez que mete una ecuación, la absorbemos directamente sin validar
-                        update_video("0 = 0", prompt, "Iniciando la resolución algebraíca")
-                        st.session_state.equation = prompt
-                        backend_context = f"El usuario acaba de proponerte la ecuación '{prompt}' para comenzar a estudiar. Acéptala y dile que adelante con el primer paso."
+                        # Verificamos furtivamente si la ecuación inicial tiene formato matemático limpio
+                        # usando el motor para atrapar basurilla (ej. "quiero resolver 3x=9")
+                        probe = run_solver("hint", prompt)
+                        
+                        if "error" in probe and "Error" in str(probe.get("error")):
+                            backend_context = f"El usuario intentó proponer la ecuación '{prompt}' pero contiene texto conversacional o está mal formateada. Pídele amablemente que escriba ÚNICAMENTE la pura ecuación matemática (ej. '3*x - 1 = 9')."
+                        else:
+                            # Si es la primera vez y el parseo sobrevivió, interceptamos la ecuación limpia
+                            update_video("0 = 0", prompt, "Iniciando la resolución algebraíca")
+                            st.session_state.equation = prompt
+                            backend_context = f"El usuario acaba de proponerte la ecuación limpia '{prompt}' para comenzar. Acéptala y dile que adelante con el primer paso."
                     else:
                         # Validar el paso normal
                         validation = run_solver("validate", st.session_state.equation, prompt)
