@@ -50,21 +50,32 @@ def run_solver(*args):
         pass
     return {"error": result.stderr}
 
-def ask_llm_locally(prompt_text):
-    """Hace ping a Ollama pasándole nuestro mensaje inyectado con los metadatos de SymPy"""
+def ask_llm_locally(user_prompt, backend_context):
+    """Hace ping a Ollama pasándole nuestro historial, el mensaje y el contexto oculto de SymPy"""
+    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    
+    # Agregar todo el historial previo
+    for msg in st.session_state.messages[:-1]:
+        messages.append({"role": msg["role"], "content": msg["content"]})
+        
+    # Inyectar el diagnóstico de nuestro orquestador como un mensaje invisible para guiarlo
+    hidden_system = f"--- CONTEXTO SIMBÓLICO Y DIRECTRIZ (NO LO LEAS EN VOZ ALTA) ---\n{backend_context}"
+    messages.append({"role": "system", "content": hidden_system})
+    
+    # Finalmente agregar exactamente lo que dijo el usuario
+    messages.append({"role": "user", "content": user_prompt})
+
     payload = {
         "model": OLLAMA_MODEL,
-        "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": prompt_text}
-        ],
+        "messages": messages,
         "stream": False
     }
+    
     try:
         response = requests.post(OLLAMA_URL, json=payload, timeout=10)
         return response.json().get("message", {}).get("content", "Error al leer del LLM.")
     except Exception:
-         return "(El LLM local no está respondiendo. Verifica que Ollama esté encendido en el puerto 11434). \n\n**JSON Simbólico Interno:**\n" + prompt_text
+         return "(El LLM local no está respondiendo. Verifica que Ollama esté encendido). \n\n**JSON Simbólico Interno:**\n" + backend_context
 
 def update_video(old_eq, new_eq, desc):
     """Ejecuta Manim de forma asíncrona para mitigar latencia y actualiza la UI cuando acaba"""
@@ -109,30 +120,29 @@ with col1:
                     
                     if validation.get("paso_valido"):
                         # Si es válido, animamos!
-                        # Primero le preguntamos sutilmente al solver cómo se llamó ese paso algebraico
                         hint = run_solver("hint", st.session_state.equation)
                         desc = hint.get("descripcion", "Operación del alumno")
                         
                         update_video(st.session_state.equation, prompt, desc)
                         st.session_state.equation = prompt
                         
-                        llm_prompt = f"El alumno ingresó el paso correcto '{prompt}'. Felicítalo brevemente."
+                        backend_context = f"El usuario acaba de cambiar la pizarra a '{prompt}'. El motor simbólico confirma que el salto matemático es VÁLIDO. Felicítalo de forma empática."
                     else:
                         # Si es inválido, el LLM lee el diagnóstico exacto de nuestro árbol de Go
                         error_diagnostico = validation.get("error", "Error matemático desconocido.")
-                        llm_prompt = f"El alumno ingresó '{prompt}' pero es incorrecto matemáticamente. El clasificador heurístico dictamina: '{error_diagnostico}'. Guía al alumno para que entienda el error, no le des la respuesta directa."
+                        backend_context = f"El usuario intentó pasar de '{st.session_state.equation}' a '{prompt}'. El motor simbólico determina que es INVÁLIDO. Diagnóstico: '{error_diagnostico}'. Úsalo para corregirlo guiándolo sin darle la respuesta final."
                 else:
-                    # Si sólo pide ayuda o hace una pregunta verbal, forzamos un HINT
+                    # Si no hay '=', fue conversación normal ("hola", "ayuda", "¿y qué hago?")
                     hint = run_solver("hint", st.session_state.equation)
                     if "error" in hint:
-                        llm_prompt = f"El alumno pidió ayuda. Dile que la ecuación '{st.session_state.equation}' ya está completamente resuelta."
+                        backend_context = f"El usuario mandó un mensaje. La ecuación actual {st.session_state.equation} ya está completamente resuelta según el motor."
                     else:
                         siguiente_paso = hint.get("resultado")
                         descripcion = hint.get("descripcion")
-                        llm_prompt = f"El alumno pide ayuda. El siguiente paso heurístico correcto para la ecuación '{st.session_state.equation}' es llegar a '{siguiente_paso}' usando '{descripcion}'. Dale una ligera pista empática sin darle el resultado explícitamente."
+                        backend_context = f"La ecuación actual es '{st.session_state.equation}'. El Siguiente Paso Óptimo según el motor lógico es llegar a '{siguiente_paso}' usando la técnica de '{descripcion}'. Responde a nivel conversacional dando suaves pistas hacia allá, sin dar la respuesta explícita."
                 
                 # Consumir el LLM local
-                llm_response = ask_llm_locally(llm_prompt)
+                llm_response = ask_llm_locally(prompt, backend_context)
                 st.markdown(llm_response)
                 st.session_state.messages.append({"role": "assistant", "content": llm_response})
                 st.rerun()
