@@ -59,9 +59,8 @@ def ask_llm_locally(user_prompt, backend_context):
     for msg in st.session_state.messages[:-1]:
         messages.append({"role": msg["role"], "content": msg["content"]})
         
-    # Llama 3 y otros modelos locales colapsan si ven mensajes "system" a mitad del historial.
-    # La solución es fusionar el contexto interno y el prompt en un solo mensaje de usuario.
-    combined_prompt = f"[ENTORNO DE ORQUESTACIÓN NO VISIBLE PARA EL ALUMNO]:\n{backend_context}\n\n[LO QUE EL ALUMNO ESCRIBIÓ LITERALMENTE]:\n{user_prompt}"
+    # Colocar primero lo que dijo el usuario, y al final una instrucción estricta de sistema reducida
+    combined_prompt = f"{user_prompt}\n\n[INFO INTERNA (NO MENCIONAR)]: {backend_context}"
     
     messages.append({"role": "user", "content": combined_prompt})
 
@@ -136,20 +135,20 @@ with col1:
                         update_video(st.session_state.equation, prompt, desc)
                         st.session_state.equation = prompt
                         
-                        backend_context = f"El usuario acaba de cambiar la pizarra a '{prompt}'. El motor simbólico confirma que el salto matemático es VÁLIDO. Felicítalo de forma empática."
+                        backend_context = f"El paso '{prompt}' es VÁLIDO. Felicítalo."
                     else:
                         # Si es inválido, el LLM lee el diagnóstico exacto de nuestro árbol de Go
                         error_diagnostico = validation.get("error", "Error matemático desconocido.")
-                        backend_context = f"El usuario intentó pasar de '{st.session_state.equation}' a '{prompt}'. El motor simbólico determina que es INVÁLIDO. Diagnóstico: '{error_diagnostico}'. Úsalo para corregirlo guiándolo sin darle la respuesta final."
+                        backend_context = f"Paso INVÁLIDO. Diagnóstico de Go: '{error_diagnostico}'. Guíalo al error sin dar respuestas."
                 else:
                     # Si no hay '=', fue conversación normal ("hola", "ayuda", "¿y qué hago?")
                     hint = run_solver("hint", st.session_state.equation)
                     if "error" in hint:
-                        backend_context = f"El usuario mandó un mensaje. La ecuación actual {st.session_state.equation} ya está completamente resuelta según el motor."
+                        backend_context = f"La ecuación ya está resuelta. Anima al estudiante a continuar platicando o felicítalo."
                     else:
                         siguiente_paso = hint.get("resultado")
                         descripcion = hint.get("descripcion")
-                        backend_context = f"La ecuación actual es '{st.session_state.equation}'. El Siguiente Paso Óptimo según el motor lógico es llegar a '{siguiente_paso}' usando la técnica de '{descripcion}'. Responde a nivel conversacional dando suaves pistas hacia allá, sin dar la respuesta explícita."
+                        backend_context = f"El paso idóneo para llegar a '{siguiente_paso}' es aplicar: '{descripcion}'. Dale una pista usando esto."
                 
                 # Consumir el LLM local
                 llm_response = ask_llm_locally(prompt, backend_context)
