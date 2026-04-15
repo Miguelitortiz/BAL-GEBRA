@@ -86,6 +86,16 @@ def ask_llm_locally(user_prompt, backend_context):
     except Exception:
          return "(El LLM local no está respondiendo. Verifica que Ollama esté encendido). \n\n**JSON Simbólico Interno:**\n" + backend_context
 
+import re
+
+def extract_equation(text):
+    """Filtra la basura conversacional y extrae la pura ecuación matemática"""
+    # Busca secuencias con números, la variable x, operadores matemáticos y el igual
+    match = re.search(r'([0-9xX\s\+\-\*\/\(\)\^\.]+=[\s0-9xX\+\-\*\/\(\)\^\.]+)', text)
+    if match:
+        return match.group(1).strip()
+    return text
+
 def update_video(old_eq, new_eq, desc):
     """Ejecuta Manim de forma asíncrona para mitigar latencia y actualiza la UI cuando acaba"""
     subprocess.run([MANIM_CMD, old_eq, new_eq, desc], cwd="./manim_module", capture_output=True)
@@ -119,44 +129,48 @@ with col1:
             st.markdown(msg["content"])
 
     if prompt := st.chat_input("Escribe tu paso algebraico (ej. 3*x = x + 6) o pide una pista..."):
-        # Mostrar lo que el usuario escribió
+        # Mostrar lo que el usuario escribió textualmente en el chat
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
 
         with st.chat_message("assistant"):
             with st.spinner("Motor Simbólico + LLM pensando..."):
-                # Si el input tiene "=", presumimos que intentó un paso matemático
-                if "=" in prompt:
+                
+                # Extraer la ecuación si el usuario escribió texto mixto
+                clean_prompt = extract_equation(prompt)
+                
+                # Si el input resultante tiene "=", presumimos que intentó un paso matemático
+                if "=" in clean_prompt:
                     if st.session_state.equation == "":
                         # Verificamos furtivamente si la ecuación inicial tiene formato matemático limpio
                         # usando el motor para atrapar basurilla (ej. "quiero resolver 3x=9")
-                        probe = run_solver("hint", prompt)
+                        probe = run_solver("hint", clean_prompt)
                         
                         if "error" in probe and "Error" in str(probe.get("error")):
-                            backend_context = f"El usuario intentó proponer la ecuación '{prompt}' pero contiene texto conversacional o está mal formateada. Pídele amablemente que escriba ÚNICAMENTE la pura ecuación matemática (ej. '3*x - 1 = 9')."
+                            backend_context = f"El usuario intentó proponer la ecuación '{clean_prompt}' pero todavía contiene fallos de formato. Pídele amablemente que la escriba limpiamente (ej. '3*x - 1 = 9')."
                         else:
                             # Si es la primera vez y el parseo sobrevivió, interceptamos la ecuación limpia
-                            update_video("0 = 0", prompt, "Iniciando la resolución algebraíca")
-                            st.session_state.equation = prompt
-                            backend_context = f"El usuario acaba de proponerte la ecuación limpia '{prompt}' para comenzar. Acéptala y dile que adelante con el primer paso."
+                            update_video("0 = 0", clean_prompt, "Iniciando la resolución algebraíca")
+                            st.session_state.equation = clean_prompt
+                            backend_context = f"El usuario te trajo esta ecuación con lenguaje natural: '{prompt}'. El sistema extrajo matemáticamente '{clean_prompt}'. Acéptala alegremente y dile que empiecen."
                     else:
                         # Validar el paso normal
-                        validation = run_solver("validate", st.session_state.equation, prompt)
+                        validation = run_solver("validate", st.session_state.equation, clean_prompt)
                         
                         if validation.get("paso_valido"):
                             # Si es válido, animamos!
                             hint = run_solver("hint", st.session_state.equation)
                             desc = hint.get("descripcion", "Operación del alumno")
                             
-                            update_video(st.session_state.equation, prompt, desc)
-                            st.session_state.equation = prompt
+                            update_video(st.session_state.equation, clean_prompt, desc)
+                            st.session_state.equation = clean_prompt
                             
-                            backend_context = f"El paso '{prompt}' es VÁLIDO matemática y lógicamente. Felicítalo empáticamente."
+                            backend_context = f"El usuario escribió: '{prompt}'. Su paso matemático extraído '{clean_prompt}' es VÁLIDO matemática y lógicamente. Felicítalo empáticamente."
                         else:
                             # Si es inválido, el LLM lee el diagnóstico exacto de nuestro árbol de Go
                             error_diagnostico = validation.get("error", "Error matemático desconocido.")
-                            backend_context = f"Paso INVÁLIDO. Diagnóstico de Go: '{error_diagnostico}'. Guíalo a que encuentre su error sin regalarle respuestas."
+                            backend_context = f"El usuario escribió: '{prompt}'. Su paso '{clean_prompt}' es INVÁLIDO. Diagnóstico de Go: '{error_diagnostico}'. Guíalo a que encuentre su error sin regalarle respuestas."
                 else:
                     # Si no hay '=', fue conversación normal ("hola", "ayuda", "¿y qué hago?")
                     if st.session_state.equation == "":
