@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.env
+tutor_env/
+
+# Mac / OS
+.DS_Store
+
+# Go
+solver/solver
+autosolver/autosolver
+
+# Manim
+manim_module/media/
+__pycache__/
+
+# Sub-Agents / AI
+.agents/
+.gemini/
