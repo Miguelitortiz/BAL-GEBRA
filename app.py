@@ -99,7 +99,7 @@ def extract_equation(text):
 def update_video(old_eq, new_eq, desc):
     """Ejecuta Manim de forma asíncrona para mitigar latencia y actualiza la UI cuando acaba"""
     subprocess.run([MANIM_CMD, old_eq, new_eq, desc], cwd="./manim_module", capture_output=True)
-    video_file = "./manim_module/media/videos/renderer/480p15/EquationTransition.mp4"
+    video_file = "../manim_module/media/videos/renderer/480p15/EquationTransition.mp4"
     if os.path.exists(video_file):
         st.session_state.video_path = video_file
 
