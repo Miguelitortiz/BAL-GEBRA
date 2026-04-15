@@ -24,8 +24,8 @@ class EquationTransition(Scene):
         self.play(FadeIn(title, shift=DOWN), run_time=0.8)
 
         # Usamos MathTex interactivo
-        eq1 = MathTex(eq_old_latex, font_size=60)
-        eq2 = MathTex(eq_new_latex, font_size=60)
+        eq1 = MathTex(eq_old_latex, font_size=96)
+        eq2 = MathTex(eq_new_latex, font_size=96)
 
         # 3. Presentamos la ecuación previa
         self.play(Write(eq1), run_time=1.2)

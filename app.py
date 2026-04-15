@@ -151,10 +151,12 @@ with col2:
     if st.session_state.equation == "":
         st.markdown("### (Pizarra en blanco)")
     else:
-        st.markdown(f"### Estado Actual:\n$${st.session_state.equation}$$")
+        # Aumentamos agresivamente el tamaño de la ecuación en la UI via LaTeX \huge
+        st.markdown(f"### Estado Actual:\n$$ \\huge {st.session_state.equation} $$")
     
     if st.session_state.video_path:
-        st.video(st.session_state.video_path)
+        # Reproducir en bucle siempre
+        st.video(st.session_state.video_path, loop=True, autoplay=True)
     else:
         st.info("La animación del paso aparecerá aquí.")
         
@@ -195,13 +197,12 @@ with col1:
                 if "=" in clean_prompt:
                     if st.session_state.equation == "":
                         # Verificamos furtivamente si la ecuación inicial tiene formato matemático limpio
-                        # usando el motor para atrapar basurilla (ej. "quiero resolver 3x=9")
                         probe = run_solver("hint", clean_prompt)
                         
                         if "error" in probe and "Error" in str(probe.get("error")):
-                            backend_context = f"El usuario intentó proponer la ecuación '{clean_prompt}' pero todavía contiene fallos de formato. Pídele amablemente que la escriba limpiamente (ej. '3*x - 1 = 9')."
+                            backend_context = f"El usuario intentó proponer la ecuación '{clean_prompt}' pero todavía contiene fallos de formato. Pídele amablemente que la escriba limpiamente sin espacios o letras raras."
                         else:
-                            # Si es la primera vez y el parseo sobrevivió, interceptamos la ecuación limpia
+                            # Interceptamos la ecuación limpia
                             update_video("0 = 0", clean_prompt, "Iniciando la resolución algebraíca")
                             st.session_state.equation = clean_prompt
                             
@@ -210,30 +211,32 @@ with col1:
                             if "error" in probe_next:
                                 st.session_state.is_solved = True
                             
-                            backend_context = f"El usuario te trajo esta ecuación con lenguaje natural: '{prompt}'. El sistema extrajo matemáticamente '{clean_prompt}'. Acéptala alegremente y dile que empiecen."
+                            backend_context = f"El usuario propuso la ecuación '{clean_prompt}'. Acéptala alegremente y dale una ligerísima pista de cómo empezar."
                     else:
                         # Validar el paso normal
                         validation = run_solver("validate", st.session_state.equation, clean_prompt)
                         
                         if validation.get("paso_valido"):
-                            # Si es válido, animamos!
-                            hint = run_solver("hint", st.session_state.equation)
-                            desc = hint.get("descripcion", "Operación del alumno")
+                            # Animamos el movimiento
+                            hint_viejo = run_solver("hint", st.session_state.equation)
+                            desc = hint_viejo.get("descripcion", "Operación del alumno")
                             
                             update_video(st.session_state.equation, clean_prompt, desc)
                             st.session_state.equation = clean_prompt
                             
-                            # Revisamos furtivamente si este paso terminó de resolver la ecuación por completo
+                            # Re-evaluamos el Árbol Heurístico desde la nueva posición del alumno
                             probe_next = run_solver("hint", clean_prompt)
                             if "error" in probe_next:
                                 st.session_state.is_solved = True
-                                backend_context = f"El alumno resolvió exitosamente la ecuación con el paso '{clean_prompt}'. Felicítalo efusivamente y menciónale que ahora le saldrá el botón de Reiniciar si quiere hacer otra."
+                                backend_context = f"El alumno resolvió exitosamente la ecuación con el paso VÁLIDO '{clean_prompt}'. Felicítalo efusivamente y menciónale que presione el botón de Reiniciar."
                             else:
-                                backend_context = f"El usuario escribió: '{prompt}'. Su paso matemático extraído '{clean_prompt}' es VÁLIDO matemática y lógicamente. Felicítalo empáticamente."
+                                proximo_paso = probe_next.get("resultado", "")
+                                heuristica = probe_next.get("descripcion", "")
+                                backend_context = f"El usuario dio un paso VÁLIDO ('{clean_prompt}'). Felicítalo. Además, el NUEVO paso sugerido por el orquestador desde aquí es aplicar: '{heuristica}'. Asígnale sutilmente esta pista para que no se pierda."
                         else:
                             # Si es inválido, el LLM lee el diagnóstico exacto de nuestro árbol de Go
                             error_diagnostico = validation.get("error", "Error matemático desconocido.")
-                            backend_context = f"El usuario escribió: '{prompt}'. Su paso '{clean_prompt}' es INVÁLIDO. Diagnóstico de Go: '{error_diagnostico}'. Guíalo a que encuentre su error sin regalarle respuestas."
+                            backend_context = f"El usuario escribió el paso '{clean_prompt}', el cual es INVÁLIDO. Diagnóstico de Go: '{error_diagnostico}'. Guíalo a que encuentre su error de forma socrática, sin darle la respuesta."
                 else:
                     # Si no hay '=', fue conversación normal ("hola", "ayuda", "¿y qué hago?")
                     if st.session_state.equation == "":
@@ -242,11 +245,10 @@ with col1:
                         hint = run_solver("hint", st.session_state.equation)
                         if "error" in hint:
                             st.session_state.is_solved = True
-                            backend_context = f"La ecuación está totalmente resuelta. Felicítalo y dile que presione el botón para reiniciar."
+                            backend_context = f"La ecuación está totalmente resuelta. Felicítalo y dile que presione el botón de nueva ecuación."
                         else:
-                            siguiente_paso = hint.get("resultado")
                             descripcion = hint.get("descripcion")
-                            backend_context = f"El paso idóneo sugerido por el Motor ahora mismo es aplicar: '{descripcion}'. Usa esta información para darle una ligera pista conversacional."
+                            backend_context = f"El paso idóneo sugerido por el Motor lógico ahora mismo es aplicar: '{descripcion}'. Usa esta información para darle una ligera pista conversacional ya que te lo está pidiendo."
                 
                 # Consumir el LLM local
                 llm_response = ask_llm_locally(prompt, backend_context)
