@@ -26,10 +26,10 @@ SYSTEM_PROMPT = """Eres un tutor socrático de álgebra estricto. DEBES cumplir 
 
 # --- SESSION STATE ---
 if "equation" not in st.session_state:
-    st.session_state.equation = "3*x - 2 = x + 4"
+    st.session_state.equation = ""
 if "messages" not in st.session_state:
     st.session_state.messages = [
-        {"role": "assistant", "content": "¡Hola! Estoy aquí para ayudarte a resolver ecuaciones. Observa la ecuación en la pantalla. ¿Qué paso te gustaría hacer primero?"}
+        {"role": "assistant", "content": "¡Hola! Estoy aquí para acompañarte a practicar. Escribe la ecuación algebraica con la que quieres empezar en el chat."}
     ]
 if "video_path" not in st.session_state:
     st.session_state.video_path = None
@@ -99,7 +99,11 @@ col1, col2 = st.columns([1.5, 1])
 # DERECHA: Pizarra Visual (Manim + Estado Actual)
 with col2:
     st.header("Pizarra")
-    st.markdown(f"### Estado Actual:\n$${st.session_state.equation}$$")
+    
+    if st.session_state.equation == "":
+        st.markdown("### (Pizarra en blanco)")
+    else:
+        st.markdown(f"### Estado Actual:\n$${st.session_state.equation}$$")
     
     if st.session_state.video_path:
         st.video(st.session_state.video_path)
@@ -124,31 +128,40 @@ with col1:
             with st.spinner("Motor Simbólico + LLM pensando..."):
                 # Si el input tiene "=", presumimos que intentó un paso matemático
                 if "=" in prompt:
-                    # Validar el paso
-                    validation = run_solver("validate", st.session_state.equation, prompt)
-                    
-                    if validation.get("paso_valido"):
-                        # Si es válido, animamos!
-                        hint = run_solver("hint", st.session_state.equation)
-                        desc = hint.get("descripcion", "Operación del alumno")
-                        
-                        update_video(st.session_state.equation, prompt, desc)
+                    if st.session_state.equation == "":
+                        # Si es la primera vez que mete una ecuación, la absorbemos directamente sin validar
+                        update_video("0 = 0", prompt, "Iniciando la resolución algebraíca")
                         st.session_state.equation = prompt
-                        
-                        backend_context = f"El paso '{prompt}' es VÁLIDO. Felicítalo."
+                        backend_context = f"El usuario acaba de proponerte la ecuación '{prompt}' para comenzar a estudiar. Acéptala y dile que adelante con el primer paso."
                     else:
-                        # Si es inválido, el LLM lee el diagnóstico exacto de nuestro árbol de Go
-                        error_diagnostico = validation.get("error", "Error matemático desconocido.")
-                        backend_context = f"Paso INVÁLIDO. Diagnóstico de Go: '{error_diagnostico}'. Guíalo al error sin dar respuestas."
+                        # Validar el paso normal
+                        validation = run_solver("validate", st.session_state.equation, prompt)
+                        
+                        if validation.get("paso_valido"):
+                            # Si es válido, animamos!
+                            hint = run_solver("hint", st.session_state.equation)
+                            desc = hint.get("descripcion", "Operación del alumno")
+                            
+                            update_video(st.session_state.equation, prompt, desc)
+                            st.session_state.equation = prompt
+                            
+                            backend_context = f"El paso '{prompt}' es VÁLIDO matemática y lógicamente. Felicítalo empáticamente."
+                        else:
+                            # Si es inválido, el LLM lee el diagnóstico exacto de nuestro árbol de Go
+                            error_diagnostico = validation.get("error", "Error matemático desconocido.")
+                            backend_context = f"Paso INVÁLIDO. Diagnóstico de Go: '{error_diagnostico}'. Guíalo a que encuentre su error sin regalarle respuestas."
                 else:
                     # Si no hay '=', fue conversación normal ("hola", "ayuda", "¿y qué hago?")
-                    hint = run_solver("hint", st.session_state.equation)
-                    if "error" in hint:
-                        backend_context = f"La ecuación ya está resuelta. Anima al estudiante a continuar platicando o felicítalo."
+                    if st.session_state.equation == "":
+                        backend_context = "Todavía no hay ninguna ecuación en la pizarra. Pídele amablemente que escriba la ecuación con la que quiere trabajar hoy."
                     else:
-                        siguiente_paso = hint.get("resultado")
-                        descripcion = hint.get("descripcion")
-                        backend_context = f"El paso idóneo para llegar a '{siguiente_paso}' es aplicar: '{descripcion}'. Dale una pista usando esto."
+                        hint = run_solver("hint", st.session_state.equation)
+                        if "error" in hint:
+                            backend_context = f"La ecuación está totalmente resuelta. Felicítalo y dile que ya acabaron."
+                        else:
+                            siguiente_paso = hint.get("resultado")
+                            descripcion = hint.get("descripcion")
+                            backend_context = f"El paso idóneo sugerido por el Motor ahora mismo es aplicar: '{descripcion}'. Usa esta información para darle una ligera pista conversacional."
                 
                 # Consumir el LLM local
                 llm_response = ask_llm_locally(prompt, backend_context)
