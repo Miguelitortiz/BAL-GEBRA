@@ -19,3 +19,9 @@ __pycache__/
 # Sub-Agents / AI
 .agents/
 .gemini/
+
+# Sensitive Papers and Specs
+features.md
+mata-lopez-CITCA2026.pdf
+agents.rar
+article_specs.md
