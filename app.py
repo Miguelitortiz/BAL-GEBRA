@@ -99,7 +99,7 @@ def extract_equation(text):
         return match.group(1).strip()
     return text
 
-def update_video(old_eq, new_eq, desc):
+def update_video(old_eq, new_eq, desc, op_accion=""):
     """Ejecuta Manim garantizando el PATH del virtual environment local"""
     
     # 1. Logging a Consola
@@ -113,6 +113,7 @@ def update_video(old_eq, new_eq, desc):
     env["EQ_OLD"] = old_eq
     env["EQ_NEW"] = new_eq
     env["DESC"] = desc
+    env["OP_ACCION"] = op_accion  # tipo de operación estructurado para el renderer
     
     # 3. Mandamos llamar a Manim forzando estrictamente que use el VENV actual
     cmd = [
@@ -202,37 +203,57 @@ with col1:
                         if "error" in probe and "Error" in str(probe.get("error")):
                             backend_context = f"El usuario intentó proponer la ecuación '{clean_prompt}' pero todavía contiene fallos de formato. Pídele amablemente que la escriba limpiamente sin espacios o letras raras."
                         else:
-                            # Interceptamos la ecuación limpia
-                            update_video("0 = 0", clean_prompt, "Iniciando la resolución algebraíca")
+                            # Primera ecuación: la aceptamos sin animación de transición
                             st.session_state.equation = clean_prompt
                             
-                            # Validamos inmediamentamente si propuso una ecuación que YA está resuelta
-                            probe_next = run_solver("hint", clean_prompt)
-                            if "error" in probe_next:
+                            # Preguntamos al motor cuál es el primer paso sugerido
+                            primer_hint = run_solver("hint", clean_prompt)
+                            if "error" in primer_hint:
                                 st.session_state.is_solved = True
-                            
-                            backend_context = f"El usuario propuso la ecuación '{clean_prompt}'. Acéptala alegremente y dale una ligerísima pista de cómo empezar."
+                                backend_context = f"La ecuación '{clean_prompt}' ya está resuelta de entrada. Felicítalo."
+                            else:
+                                accion0    = primer_hint.get("accion", "")
+                                desc0      = primer_hint.get("descripcion", "")
+                                resultado0 = primer_hint.get("resultado", "")
+                                backend_context = (
+                                    f"El usuario propuso la ecuación inicial '{clean_prompt}'. "
+                                    f"El Motor Simbólico sugiere como PRIMER PASO: '{desc0}' "
+                                    f"(operación interna: '{accion0}', resultado esperado si se aplica: '{resultado0}'). "
+                                    f"Acepta la ecuación con entusiasmo y dale UNA sola pista socrática sobre el primer paso sin revelar la respuesta."
+                                )
                     else:
                         # Validar el paso normal
                         validation = run_solver("validate", st.session_state.equation, clean_prompt)
                         
                         if validation.get("paso_valido"):
-                            # Animamos el movimiento
-                            hint_viejo = run_solver("hint", st.session_state.equation)
-                            desc = hint_viejo.get("descripcion", "Operación del alumno")
+                            # Obtenemos la descripción del paso que se acaba de aplicar
+                            hint_aplicado = run_solver("hint", st.session_state.equation)
+                            desc_aplicado  = hint_aplicado.get("descripcion", "Operación del alumno")
+                            accion_aplicado = hint_aplicado.get("accion", "")
                             
-                            update_video(st.session_state.equation, clean_prompt, desc)
+                            # Animamos la transición con el tipo de operación correcto
+                            update_video(st.session_state.equation, clean_prompt, desc_aplicado, accion_aplicado)
                             st.session_state.equation = clean_prompt
                             
-                            # Re-evaluamos el Árbol Heurístico desde la nueva posición del alumno
+                            # Re-calculamos siguiente paso desde la nueva posición
                             probe_next = run_solver("hint", clean_prompt)
                             if "error" in probe_next:
                                 st.session_state.is_solved = True
-                                backend_context = f"El alumno resolvió exitosamente la ecuación con el paso VÁLIDO '{clean_prompt}'. Felicítalo efusivamente y menciónale que presione el botón de Reiniciar."
+                                backend_context = (
+                                    f"El alumno completó la resolución con el paso VÁLIDO '{clean_prompt}'. "
+                                    f"Felicítalo efusivamente y dile que presione el botón de Reiniciar."
+                                )
                             else:
-                                proximo_paso = probe_next.get("resultado", "")
-                                heuristica = probe_next.get("descripcion", "")
-                                backend_context = f"El usuario dio un paso VÁLIDO ('{clean_prompt}'). Felicítalo. Además, el NUEVO paso sugerido por el orquestador desde aquí es aplicar: '{heuristica}'. Asígnale sutilmente esta pista para que no se pierda."
+                                accion_sig    = probe_next.get("accion", "")
+                                desc_sig      = probe_next.get("descripcion", "")
+                                resultado_sig = probe_next.get("resultado", "")
+                                backend_context = (
+                                    f"El paso '{clean_prompt}' es VÁLIDO matemáticamente. "
+                                    f"El alumno aplicó la operación '{desc_aplicado}'. "
+                                    f"El SIGUIENTE paso recomendado por el Motor es '{desc_sig}' "
+                                    f"(operación interna: '{accion_sig}', resultado si se aplica: '{resultado_sig}'). "
+                                    f"Felicítalo brevemente y da una pista socrática del siguiente paso SIN revelar '{resultado_sig}'."
+                                )
                         else:
                             # Si es inválido, el LLM lee el diagnóstico exacto de nuestro árbol de Go
                             error_diagnostico = validation.get("error", "Error matemático desconocido.")
@@ -247,8 +268,15 @@ with col1:
                             st.session_state.is_solved = True
                             backend_context = f"La ecuación está totalmente resuelta. Felicítalo y dile que presione el botón de nueva ecuación."
                         else:
-                            descripcion = hint.get("descripcion")
-                            backend_context = f"El paso idóneo sugerido por el Motor lógico ahora mismo es aplicar: '{descripcion}'. Usa esta información para darle una ligera pista conversacional ya que te lo está pidiendo."
+                            accion_h    = hint.get("accion", "")
+                            descripcion = hint.get("descripcion", "")
+                            resultado_h = hint.get("resultado", "")
+                            backend_context = (
+                                f"El alumno pide orientación. La ecuación actual es '{st.session_state.equation}'. "
+                                f"El Motor Simbólico recomienda como siguiente paso: '{descripcion}' "
+                                f"(tipo de operación: '{accion_h}'). "
+                                f"Da una pista socrática basada en eso SIN revelar que el resultado es '{resultado_h}'."
+                            )
                 
                 # Consumir el LLM local
                 llm_response = ask_llm_locally(prompt, backend_context)
