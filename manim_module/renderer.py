@@ -19,20 +19,32 @@ class EquationTransition(Scene):
         eq_new_latex = clean_latex(eq_new_str)
 
         # 2. Elementos visuales
-        # El título en la parte superior explica la pista/heurística (empatía cognitiva)
-        title = Text(desc, font_size=28, color=BLUE).to_edge(UP)
+        # Título descriptivo en la parte superior
+        title = Text("Aplicando transición:", font_size=32, color=BLUE).to_edge(UP)
         self.play(FadeIn(title, shift=DOWN), run_time=0.8)
 
-        # Usamos MathTex interactivo
-        eq1 = MathTex(eq_old_latex, font_size=96)
-        eq2 = MathTex(eq_new_latex, font_size=96)
+        # Usamos MathTex interactivo (bajamos un poco el tamaño para acomodar ambas de forma vertical)
+        eq1 = MathTex(eq_old_latex, font_size=76)
+        eq2 = MathTex(eq_new_latex, font_size=76)
 
-        # 3. Presentamos la ecuación previa
+        # Ubicamos la vieja arriba y la nueva abajo
+        eq1.next_to(title, DOWN, buff=1.0)
+        
+        # 3. Presentamos la ecuación original
         self.play(Write(eq1), run_time=1.2)
         self.wait(0.5)
         
-        # 4. Magia Neuro-Simbólica: Transición Coherente
-        # TransformMatchingShapes mapea las partes idénticas (como la 'x' o el '=' o los números) 
-        # y las desplaza físicamente por la pantalla mientras desaparece/aparece lo diferente.
-        self.play(TransformMatchingShapes(eq1, eq2), run_time=2.0)
+        # 4. Flecha descriptiva indicando la manipulación
+        arrow = Arrow(UP, DOWN, color=YELLOW).next_to(eq1, DOWN, buff=0.5)
+        operation_text = Text(desc, font_size=24, color=YELLOW).next_to(arrow, RIGHT, buff=0.2)
+        
+        self.play(GrowArrow(arrow), Write(operation_text), run_time=1.0)
+        self.wait(0.5)
+
+        eq2.next_to(arrow, DOWN, buff=0.5)
+
+        # 5. Magia Pedagógica: TransformFromCopy en formato vertical
+        # Toma la ecuación 1, clona sus letras y las empuja hacia abajo acomodándolas
+        # en la ecuación 2, enfatizando qué símbolos sobrevivieron, se movieron o mutaron.
+        self.play(TransformFromCopy(eq1, eq2), run_time=2.0)
         self.wait(1.5)
